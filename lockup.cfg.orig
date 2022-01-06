@@ -1,0 +1,59 @@
+###################################################################################
+#This is the LockUp Configuration File.
+#Any entry starting with a hash (#) character is treated as a comment.
+#Directives need to be modified and uncommented to take effect.
+#This file should be in the ~/.config/backup folder. Create this directory
+#if it does not exist and place this file in there with permissions 600.
+###################################################################################
+
+
+#GPG Recipient
+#Specify the email address of the recipient / owner of the backup files.
+#The GPG Public Key must be installed in your public keychain.
+#RECIPIENT=user@myemail.com
+
+#Local backup staging directory
+#WARNING: **DONOT USE A DIRECTORY WHICH EXISTS.**
+#WARNING: **DONOT MANUALLY SAVE INFORMATION TO THIS DIRECTORY.**
+#Information to be backed up will be copied here before being encrypted.
+#This location must have enough space e.g. minimum ~ size of backup information
+#and be readable and writeable to the user.
+LOCAL_BACKUP_DIRECTORY=/var/tmp/lockup
+
+#Remote File ID is the identification string of the directory in your
+#Google Drive where encrypted backups will be uploaded. To find this value
+#use the gdrive tool. See https://gdrive.hask.no for complete information
+#or run gdrive mkdir {dir} to create a directory and note the id.
+#REMOTE_FILEID=
+
+#Backup Directories list all the target directories (and subdirectories)
+#to backup. Specif each directory in-between the parenthesis. The directory
+#must be between two double quotes. Each directory seperated with a space
+#BACKUP_DIRECTORIES=("/home/user/Pictures" "/home/user/Documents" "/home/user/Work Documents")
+
+#File can be encrypted in binary format or ASCII format. Both are equally secure.
+#Both have advantages and disadvantages, consult the gpg manual for further information
+#An entry must exist for each directory set in BACKUP_DIRECTORIES.
+#https://gnupg.org/documentation/manuals.html 
+#Valid options are bin or ascii
+#ENCRYPTION_FORMATS=("ascii" "ascii" "bin")
+
+#Command paths
+#Specify the full path of the following tools.
+#gdrive, find, gpg and grep. Some of these tools will likely need to
+#be installed on your system. Others will be present already.
+#To find the path use the which command e.g. which grep
+GDRIVE_PATH=/usr/bin/gdrive
+FIND_PATH=/usr/bin/find
+GPG_PATH=/usr/local/bin/gpg
+GREP_PATH=/usr/bin/grep
+
+#Lock file
+#This directive should specify the full path of a PID file. It should be a globally
+#unique file on each system if LOCAL_BACKUP_DIRECTORY is shared between multiple
+#users. If LOCAL_BACKUP_DIRECTORY is unique then LOCK_FILE can also be unique. 
+#The path should be readable and writeable by the user.
+LOCK_FILE=/tmp/lockup-ba63829.pid
+
+#Supported GDrive versions
+SUPPORTED_GDRIVE=("2.1.1")

@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+#LockUp - Encrypted synchronous backup to Google Drive.
+#See lockup.cfg for configuration option.
+#https://github.com/brightpathsofglory/LockUp
+another_instance() 
+{ 
+	printf "\e[31mThere is another instance of LockUp currently running. Exiting.\e[0m\n"
+	cat $LOCK_FILE
+	exit 1
+}
+remove_lockfile() 
+{ 
+	rm -f "$LOCK_FILE"
+}
+check_version()
+{
+	in=0
+	ver_result=$("$GDRIVE_PATH" version)
+	GDRIVE_CURRENT_VERSION=(${ver_result[@]})
+	GDRIVE_CURRENT_VERSION="${GDRIVE_CURRENT_VERSION[1]}"
+	for ((i=0; i < ${#SUPPORTED_GDRIVE[@]}; i++))
+	do
+		if [[ "${SUPPORTED_GDRIVE[$i]}" = "$GDRIVE_CURRENT_VERSION" ]]; then
+			in=1
+			break
+		fi
+	done
+	if [[ "$in" != "1" ]]; then
+		printf "\e[31mYou are using GDrive $GDRIVE_CURRENT_VERSION which is not listed as compatible.\e[0m\nYou should carefully confirm operation or use a compatible version.\n\n"
+		fi
+}
+if ! [ -f ~/.config/lockup/lockup.cfg ]; then
+    printf "No configuration file can be found.\nThe configuration file must exist in ~/.config/backup/backup.cfg\n"
+    exit 1
+else
+	#sanity checking for config file and basic utilites
+	. ~/.config/lockup/lockup.cfg
+	if [ -z ${RECIPIENT} ]; then printf "RECIPIENT is unset. Edit ~/.config/lockup/lockup.cfg to fix. Exiting.\n"; exit 1; fi
+	if [ -z ${LOCAL_BACKUP_DIRECTORY} ]; then printf "LOCAL_BACKUP_DIRECTORY is unset. Edit ~/.config/lockup/lockup.cfg to fix. Exiting.\n"; exit 1; fi
+	if [ -z ${REMOTE_FILEID} ]; then printf "LOCAL_BACKUP_DIRECTORY is unset. Edit ~/.config/lockup/lockup.cfg to fix. Exiting.\n"; exit 1; fi
+	if [ -z ${BACKUP_DIRECTORIES} ]; then printf "BACKUP_DIRECTORIES are unset. Edit ~/.config/lockup/lockup.cfg to fix. Exiting.\n"; exit 1; fi
+	if [ -z ${ENCRYPTION_FORMATS} ]; then printf "ENCRYPTION_FORMATS are unset. Edit ~/.config/lockup/lockup.cfg to fix. Exiting.\n"; exit 1; fi	
+	if [ -z ${GDRIVE_PATH} ]; then printf "GDRIVE_PATH is unset. Edit ~/.config/lockup/lockup.cfg to fix. Exiting.\n"; exit 1; fi
+	if [ -z ${FIND_PATH} ]; then printf "FIND_PATH is unset. Edit ~/.config/lockup/lockup.cfg to fix. Exiting.\n"; exit 1; fi
+	if [ -z ${GPG_PATH} ]; then printf "GPG_PATH is unset. Edit ~/.config/lockup/lockup.cfg to fix. Exiting.\n"; exit 1; fi
+	if [ -z ${GREP_PATH} ]; then printf "GREP_PATH is unset. Edit ~/.config/lockup/lockup.cfg to fix. Exiting.\n"; exit 1; fi
+	if [ -z ${LOCK_FILE} ]; then printf "LOCK_FILE is unset. Edit ~/.config/lockup/lockup.cfg to fix. Exiting.\n"; exit 1; fi
+	if [ -z ${SUPPORTED_GDRIVE} ]; then printf "SUPPORTED_GDRIVE is unset. Edit ~/.config/lockup/lockup.cfg to fix. Exiting.\n"; exit 1; fi
+	if ! [[ -f $GDRIVE_PATH ]]; then printf "$GDRIVE_PATH program not found.\nConfirm this program has been installed and then update the GDRIVE_PATH directive in your configuration file.\nSee https://gdrive.hask.no and https://github.com/prasmussen/gdrive/releases for usage and download.\n"; exit 1; fi
+	if ! [[ -f $FIND_PATH ]]; then printf "$FIND_PATH program not found. Check the path and confirm this program has been installed. Try 'which find'.\n"; exit 1; fi
+	if ! [[ -f $GPG_PATH ]]; then printf "$GPG_PATH program not found. Check the path and confirm this program has been installed. Try 'which gpg'.\n"; exit 1; fi
+	if ! [[ -f $GREP_PATH ]]; then printf "$GREP_PATH program not found. Check the path and confirm this program has been installed. Try 'which grep'.\n"; exit 1; fi
+	if [[ -z `which touch` ]]; then
+   		printf "The touch command could not be found.\n"
+   		exit 1
+	fi
+	if [[ -z `which rm` ]]; then
+   		printf "The rm command could not be found.\n"
+   		exit 1
+	fi
+	if [[ -z `which wc` ]]; then
+   		printf "The wc command could not be found.\n"
+   		exit 1
+	fi
+	if [[ -z `which ls` ]]; then
+   		printf "The ls command could not be found.\n"
+   		exit 1
+	fi					
+fi
+if [ -f "$LOCK_FILE" ]; then
+	kill -0 "$(cat $LOCK_FILE)" && another_instance
+fi
+trap remove_lockfile EXIT
+echo $$ > "$LOCK_FILE"
+check_version
+#array size check
+if [ ${#BACKUP_DIRECTORIES[@]} -ne ${#ENCRYPTION_FORMATS[@]} ]; then
+	printf "BACKUP_DIRECTORIES directive contains a different number of elements to ENCRYPTION_FORMATS directive.\nEvery Backup Directory must have an associated Encryption format associated with it.\n"
+	exit 1
+fi
+for ((i=0; i < ${#ENCRYPTION_FORMATS[@]}; i++))
+do
+	if [[ "${ENCRYPTION_FORMATS[$i]}" != "bin" ]]; then
+		if [[ "${ENCRYPTION_FORMATS[$i]}" != "ascii" ]]; then
+			printf "'${ENCRYPTION_FORMATS[$i]}' is an invalid directive for ENCRYPTION_FORMAT.\nValid options are ascii or bin.\n"
+			exit 1;
+		fi
+	fi
+done
+#Confirm the public key for RECIPIENT is available
+if [[ -z `$GPG_PATH -k | $GREP_PATH $RECIPIENT` ]]; then
+   printf "The public key for $RECIPIENT does not exist. Import the public key using gpg --import and try again.\n"
+   exit 1
+fi
+#Confirm the local backup directory is created
+if [[ -d "$LOCAL_BACKUP_DIRECTORY" ]]
+then
+	printf "The directory "$LOCAL_BACKUP_DIRECTORY" already exists. Exiting.\n"
+	exit 1
+else
+	mkdir -p "$LOCAL_BACKUP_DIRECTORY"
+	if [ $? -ne 0 ] ; then
+    		printf "The directory $LOCAL_BACKUP_DIRECTORY does not exist and could not be created.\n"
+    		exit 1
+	fi
+fi
+
+if [ "$(ls -A $LOCAL_BACKUP_DIRECTORY)" ]
+then
+	rm -fr "$LOCAL_BACKUP_DIRECTORY"
+	if [ $? -ne 0 ] ; then
+    		printf "The directory $LOCAL_BACKUP_DIRECTORY could not be emptied. Check permissions.\n"
+    		exit 1
+	fi
+fi
+$GDRIVE_PATH about
+printf "\n"
+if [ $? -ne 0 ] ; then
+	printf "GDrive needs some configuration. Follow the link above.\n"
+	exit 1
+fi
+$GPG_PATH --version
+printf "\n"
+for ((i=0; i < "${#BACKUP_DIRECTORIES[@]}"; i++))
+do
+if [ -d "${BACKUP_DIRECTORIES[$i]}" ]; then
+	#Setup encryption format
+	ENCRYPTION_FORMAT=${ENCRYPTION_FORMATS[$i]};
+	if [ $ENCRYPTION_FORMAT = "bin" ]; then
+		ENCRYPTION_FORMAT=""
+		EXT="gpg"
+	else
+		if [ $ENCRYPTION_FORMAT = "ascii" ]; then
+			ENCRYPTION_FORMAT="--armor"
+			EXT="asc"
+		else
+			printf "'$ENCRYPTION_FORMAT' is an invalid directive for ENCRYPTION_FORMAT.\nValid options are ascii or bin.\n"
+			exit 1;
+		fi
+	fi
+		printf "Copying ${BACKUP_DIRECTORIES[$i]}\n"
+		cp --verbose --force --recursive --preserve=mode,ownership,timestamps "${BACKUP_DIRECTORIES[$i]}" "$LOCAL_BACKUP_DIRECTORY"
+		if [ $? -ne 0 ] ; then
+    			printf "The backup directory ${BACKUP_DIRECTORIES[$i]} failed to copy to $LOCAL_BACKUP_DIRECTORY\n"
+    			exit 1
+		else
+			printf "Encrypting copy of ${BACKUP_DIRECTORIES[$i]} to $RECIPIENT\n"
+			$FIND_PATH "$LOCAL_BACKUP_DIRECTORY" -type f -not -iname '*.asc' -not -iname '*.gpg' -not -iname '*.pgp' -exec printf "Encrypting {}\n" \; -exec $GPG_PATH --encrypt $ENCRYPTION_FORMAT --batch --yes --multifile --trust-model always -r $RECIPIENT {} \; -exec touch -r {} {}.$EXT \; -exec rm {} \;
+		fi
+	else
+	  	printf "The backup directory ${BACKUP_DIRECTORIES[$i]} does not exist.\n"
+	  	exit 1
+fi
+done
+$GDRIVE_PATH sync upload --keep-remote --delete-extraneous "$LOCAL_BACKUP_DIRECTORY" $REMOTE_FILEID
+if [ $? -ne 0 ] ; then
+	rm -fr "$LOCAL_BACKUP_DIRECTORY"
+	printf "The GDrive Sync has failed.\n"
+	exit 1
+fi
+$FIND_PATH "$LOCAL_BACKUP_DIRECTORY" -type f -exec printf "Cleaning up {}\n" \; -exec rm -f {} \;
+FILE_REMAINING_COUNT=$(find "$LOCAL_BACKUP_DIRECTORY" -type f | wc -l);
+if [ $FILE_REMAINING_COUNT -eq 0 ]; then
+rm -fr "$LOCAL_BACKUP_DIRECTORY"
+if [ $? -ne 0 ] ; then
+	printf "The directory "$LOCAL_BACKUP_DIRECTORY" could not be deleted. Check permissions.\n"
+	exit 1
+else
+	printf "Sync completed.\n"
+	exit 0
+fi
+else
+	printf "\e[31mSome files could not be removed from "$LOCAL_BACKUP_DIRECTORY".\e[0m\nTo prevent loss of data this directory will be left.\n"
+	exit 1
+fi
