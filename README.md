@@ -30,7 +30,7 @@ The installation steps require the external tools wget and unzip. If these are n
 wget https://github.com/brightpathsofglory/LockUp/archive/refs/tags/v1.0.0.zip
 unzip v1.0.0.zip
 sudo mv ./LockUp-1.0.0/lockup /usr/bin/lockup
-sudo chmod +x /bin/lockup
+sudo chmod +x /usr/bin/lockup
 mkdir -p ~/.config/lockup
 mv ./LockUp-1.0.0/lockup.cfg.orig ~/.config/lockup/lockup.cfg
 rm ./v1.0.0.zip
